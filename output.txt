@@ -1,0 +1,1221 @@
+=== SERVER ===
+// backend/server.js (Fixed: Mount adminRoutes under /api/admin so public /api/* user endpoints work)
+require('dotenv').config();
+
+const express = require('express');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const path = require('path');
+
+const authRoutes = require('./routes/auth');
+const adminRoutes = require('./routes/admin');
+const userRoutes = require('./routes/user');
+const paymentRoutes = require('./routes/payment');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+mongoose.set('strictQuery', false);
+
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/parking';
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('Connected to MongoDB Atlas!');
+  })
+  .catch(err => console.error('MongoDB connection error:', err));
+
+// Middleware
+app.use(cors({ origin: '*', credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Global logger
+app.use((req, res, next) => {
+  // Mask password in body before logging
+  const body = { ...req.body };
+  if (body.password) {
+    body.password = body.password.replace(/./g, '#');
+  }
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Body: ${JSON.stringify(body)}`);
+
+  const oldSend = res.json;
+  res.json = function(data) {
+    console.log(`${req.method} ${req.path} - Status: ${res.statusCode} - Data: ${JSON.stringify(data)}`);
+    return oldSend.call(this, data);
+  };
+  next();
+});
+
+// Routes - FIXED: Mount adminRoutes under /api/admin so public /api/* user endpoints work
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes); // admin-only endpoints moved to /api/admin
+app.use('/api', userRoutes); // public /api/lots, /api/spots/details, /api/summary and /api/reservations (protected where needed)
+app.use('/api/payment', paymentRoutes);
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/health', (req, res) => res.json({ status: 'OK', connected: mongoose.connection.readyState === 1 }));
+
+app.listen(PORT, () => {
+  console.log(`Server on port ${PORT}`);
+  console.log('Test: http://localhost:3000/api/lots');
+});=== AUTH ===
+const express = require('express');
+const User = require('../models/User');
+const jwt = require('jsonwebtoken'); // For JWT
+const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this'; // Add to .env
+
+router.post('/login', async (req, res) => {
+  try {
+    // Mask password immediately
+    const { username, password } = req.body;
+    const maskedPassword = password ? password.replace(/./g, '#') : '########';
+    const maskedBody = { ...req.body, password: maskedPassword };
+
+    // Log username only and masked body
+    console.log('Login attempt:', username);
+    console.log('POST /api/auth/login - Body:', JSON.stringify(maskedBody));
+
+    const user = await User.findOne({ username });
+    if (!user || !(await user.comparePassword(password))) {
+      console.log('Login failed for', username);
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+    console.log('Login success for', user.username, 'role:', user.role);
+    // Generate JWT
+    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+    res.json({ ...user.toObject(), token }); // Return user + token
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Register - Return JWT
+router.post('/register', async (req, res) => {
+  try {
+    const { username, password, role } = req.body;
+    console.log('Register attempt:', username, role); // Debug
+    if (password.length < 8 || !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@#$%^&*!])[A-Za-z\d@#$%^&*!]{7,15}$/.test(password)) {
+      return res.status(400).json({ message: 'Invalid password format' });
+    }
+    if (!['user', 'admin'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ message: 'Username exists' });
+    }
+    const user = new User({ username, password, role });
+    await user.save();
+    console.log('Registered user:', user.username, 'role:', user.role); // Debug
+    // Generate JWT
+    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '1h' });
+    res.status(201).json({ ...user.toObject(), token });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;=== USER ===
+// backend/routes/user.js
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const ParkingSpot = require('../models/ParkingSpot');
+const Reservation = require('../models/Reservation');
+const User = require('../models/User');
+const ParkingLot = require('../models/ParkingLot');
+const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this';
+
+// Middleware to check user (JWT)
+const isUser = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ message: 'No token, authorization denied' });
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || user.role !== 'user') return res.status(403).json({ message: 'User access required' });
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Token is not valid' });
+  }
+};
+
+// Public: Get lots (no auth) - same as previous user GET /lots
+// backend/routes/user.js (updated GET /lots to auto-create missing spots)
+router.get('/lots', async (req, res) => {
+  try {
+    const { query } = req.query;
+    let filter = {};
+    if (query) {
+      filter.primeLocationName = { $regex: query, $options: 'i' };
+    }
+    const lots = await ParkingLot.find(filter).lean();
+
+    for (let lot of lots) {
+      // Step 1: Get current available count
+      let availableSpots = await ParkingSpot.countDocuments({ lotId: lot._id, status: 'A' });
+
+      // Step 2: Idempotent creation - ensure spots 1 to max exist
+      const existingIndices = await ParkingSpot.distinct('spotIndex', { lotId: lot._id });
+      const missingIndices = [];
+      for (let i = 1; i <= lot.maximumNumberOfSpots; i++) {
+        if (!existingIndices.includes(i)) {
+          missingIndices.push(i);
+        }
+      }
+
+      if (missingIndices.length > 0) {
+        console.log(`Creating ${missingIndices.length} missing spots for lot "${lot.primeLocationName}": indices ${missingIndices.join(', ')}`);
+        for (let i of missingIndices) {
+          const label = lot.primeLocationName.charAt(0).toUpperCase() + '-' + i;
+          const spot = new ParkingSpot({
+            lotId: lot._id,
+            spotIndex: i,
+            status: 'A',
+            label: label
+          });
+          await spot.save(); // Unique index prevents duplicates
+        }
+        // New spots are 'A', so add to available
+        availableSpots += missingIndices.length;
+      }
+
+      // Step 3: Cap available at max (safety for any extras)
+      const cappedAvailable = Math.min(availableSpots, lot.maximumNumberOfSpots);
+      lot.availability = `${cappedAvailable}/${lot.maximumNumberOfSpots}`;
+
+      // Optional: Log extras if total > max
+      const totalSpots = await ParkingSpot.countDocuments({ lotId: lot._id });
+      if (totalSpots > lot.maximumNumberOfSpots) {
+        console.warn(`Lot "${lot.primeLocationName}" has ${totalSpots} spots > max ${lot.maximumNumberOfSpots}; consider manual cleanup.`);
+      }
+    }
+
+    res.json(lots);
+  } catch (err) {
+    console.error('GET /lots error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// backend/routes/user.js (spots/details section)
+router.get('/spots/details', async (req, res) => {
+  try {
+    const spots = await ParkingSpot.aggregate([
+      {
+        $lookup: {
+          from: 'parkinglots',
+          localField: 'lotId',
+          foreignField: '_id',
+          as: 'lot',
+        },
+      },
+      { $unwind: '$lot' },
+      {
+        $lookup: {
+          from: 'reservations',
+          let: { spotId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$spotId', '$$spotId'] },
+                leavingTimestamp: { $eq: null },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'currentReservation',
+        },
+      },
+      { $unwind: { path: '$currentReservation', preserveNullAndEmptyArrays: true } },
+      {
+        $addFields: {
+          status: { $cond: [{ $ifNull: ['$currentReservation', false] }, 'O', 'A'] },
+          vehicleNumber: { $ifNull: ['$currentReservation.vehicleNumber', null] },
+          label: {
+            $concat: [
+              { $toUpper: { $substr: ['$lot.primeLocationName', 0, 1] }},
+              '-',
+              { $toString: { $ifNull: ['$spotIndex', 1] }}, // Fallback to 1 if spotIndex missing
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          lotId: '$lot._id',
+          status: 1,
+          label: 1,
+          vehicleNumber: 1,
+          primeLocationName: '$lot.primeLocationName',
+          price: '$lot.price',
+          address: '$lot.address',
+          pinCode: '$lot.pinCode',
+        },
+      },
+      { $sort: { 'lot.primeLocationName': 1, spotIndex: 1 } },
+    ]);
+
+    if (spots.length === 0) {
+      console.log('No spots found in aggregate; falling back to simple query');
+      const basicSpots = await ParkingSpot.find()
+        .populate('lotId', 'primeLocationName price address pinCode')
+        .lean();
+      const fallbackSpots = basicSpots.map(s => ({
+        _id: s._id,
+        lotId: s.lotId._id,
+        status: 'A',
+        label: `${s.lotId.primeLocationName.charAt(0).toUpperCase()}-${s.spotIndex || 1}`,
+        vehicleNumber: null,
+        primeLocationName: s.lotId.primeLocationName,
+        price: s.lotId.price,
+        address: s.lotId.address,
+        pinCode: s.lotId.pinCode,
+      }));
+      return res.json(fallbackSpots);
+    }
+
+    console.log(`Fetched ${spots.length} spots with details`);
+    res.json(spots);
+  } catch (err) {
+    console.error('Spots/details aggregate error:', err);
+    res.status(200).json([]); // Return empty array on error
+  }
+});
+
+// Public: summary (no auth)
+router.get('/summary', async (req, res) => {
+  try {
+    const totalSpots = await ParkingSpot.countDocuments();
+    const occupiedSpots = await ParkingSpot.countDocuments({ status: 'O' });
+    const availableSpots = totalSpots - occupiedSpots;
+    res.json({ occupiedSpots, availableSpots });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/reservations', isUser, async (req, res) => {
+  try {
+    // Use authenticated user id from middleware, ignore any userId in the body
+    const userId = req.user._id;
+    const { lotId, vehicleNumber } = req.body;
+
+    if (!lotId || !vehicleNumber) {
+      return res.status(400).json({ message: 'Missing lotId or vehicleNumber' });
+    }
+
+    // Vehicle validation (adjust regexp to your needs)
+    if (!/^[A-Z]{2}\d{1,2}[A-Z]{1,2}\d{4}$/.test(vehicleNumber)) {
+      return res.status(400).json({ message: 'Invalid vehicle number format' });
+    }
+
+    // Find available spot and populate lot for potential label computation
+    const availableSpot = await ParkingSpot.findOne({ lotId, status: 'A' }).populate('lotId');
+    if (!availableSpot) {
+      return res.status(400).json({ message: 'No available spots in this lot' });
+    }
+
+    // Backfill label if missing (for legacy spots)
+    if (!availableSpot.label) {
+      if (!availableSpot.lotId || !availableSpot.lotId.primeLocationName) {
+        return res.status(500).json({ message: 'Unable to compute spot label' });
+      }
+      availableSpot.label = availableSpot.lotId.primeLocationName.charAt(0).toUpperCase() + '-' + availableSpot.spotIndex;
+    }
+
+    // Update spot status
+    availableSpot.status = 'O';
+    await availableSpot.save();
+
+    // Create reservation
+    const reservation = new Reservation({
+      spotId: availableSpot._id,
+      userId,
+      vehicleNumber,
+      parkingTimestamp: new Date(),
+    });
+
+    await reservation.save();
+
+    // Return populated reservation (spot and lot info optional)
+    const populated = await Reservation.findById(reservation._id)
+      .populate({
+        path: 'spotId',
+        select: 'lotId spotIndex label',
+        populate: { path: 'lotId', select: 'primeLocationName price' }
+      })
+      .lean();
+
+    res.status(201).json(populated || reservation);
+  } catch (err) {
+    console.error('POST /reservations error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put('/reservations/:id/release', isUser, async (req, res) => {
+  try {
+    const reservation = await Reservation.findById(req.params.id);
+    if (!reservation || reservation.userId.toString() !== req.user._id.toString() || reservation.leavingTimestamp) {
+      return res.status(404).json({ message: 'Reservation not found or already released' });
+    }
+    const spot = await ParkingSpot.findById(reservation.spotId).populate('lotId');
+    if (!spot || !spot.lotId) {
+      return res.status(400).json({ message: 'Invalid spot or lot' });
+    }
+    const lot = await ParkingLot.findById(spot.lotId._id);
+
+    // Set leaving timestamp FIRST
+    const now = new Date();
+    reservation.leavingTimestamp = now;
+
+    // Calculate duration (with min 1 min to avoid zero-cost releases)
+    const parkingTime = new Date(reservation.parkingTimestamp);
+    let duration = (now - parkingTime) / (1000 * 60 * 60); // hours
+    duration = Math.max(duration, 1 / 60); // min 1 min
+
+    const pricePerHour = lot.price || 2;
+    reservation.parkingCost = duration * pricePerHour;
+
+    // Update spot status
+    spot.status = 'A';
+    await spot.save();
+    await reservation.save();
+
+    res.json({ message: 'Released', cost: reservation.parkingCost });
+  } catch (err) {
+    console.error('PUT /reservations/:id/release error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/reservations', isUser, async (req, res) => {
+  try {
+    const reservations = await Reservation.find({ userId: req.user._id })
+      .sort({ parkingTimestamp: -1 })
+      .populate({
+        path: 'spotId',
+        select: 'lotId spotIndex label',
+        populate: { path: 'lotId', select: 'primeLocationName' }
+      })
+      .lean();
+
+    // Enhanced safe handling for lot info
+    for (let r of reservations) {
+      const spot = r.spotId;
+      if (spot && spot.lotId && spot.lotId.primeLocationName) {
+        r.lotId = spot.lotId._id.toString();
+        r.lotName = spot.lotId.primeLocationName;
+      } else {
+        // Fallback: Query lot directly if population failed
+        if (spot && spot.lotId) {
+          const fallbackLot = await ParkingLot.findById(spot.lotId).select('primeLocationName').lean();
+          if (fallbackLot) {
+            r.lotId = spot.lotId.toString();
+            r.lotName = fallbackLot.primeLocationName;
+          }
+        }
+        if (!r.lotName) {
+          r.lotId = null;
+          r.lotName = 'N/A';
+        }
+      }
+    }
+
+    res.json(reservations);
+  } catch (err) {
+    console.error('GET /reservations error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get('/revenue/summary', async (req, res) => {
+  try {
+    const reservations = await Reservation.find({ leavingTimestamp: { $ne: null } })
+      .populate({
+        path: 'spotId',
+        select: 'lotId',
+        populate: { path: 'lotId', select: 'primeLocationName' }
+      })
+      .lean();
+
+    const userRevenues = {};
+    const lotRevenues = {};
+    let totalRevenue = 0;
+
+    for (const r of reservations) {
+      const cost = (r.parkingCost && typeof r.parkingCost === 'number') ? r.parkingCost : 0;
+      totalRevenue += cost;
+
+      const uid = r.userId ? r.userId.toString() : 'unknown';
+      userRevenues[uid] = (userRevenues[uid] || 0) + cost;
+
+      // Derive lot id safely from populated spotId.lotId
+      let lid = 'unknown';
+      if (r.spotId && r.spotId.lotId) {
+        lid = r.spotId.lotId._id ? r.spotId.lotId._id.toString() : (r.spotId.lotId.toString ? r.spotId.lotId.toString() : 'unknown');
+      }
+      lotRevenues[lid] = (lotRevenues[lid] || 0) + cost;
+    }
+
+    res.json({ userRevenues, lotRevenues, totalRevenue });
+  } catch (err) {
+    console.error('GET /revenue/summary error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Public: single spot details
+router.get('/spots/:id/details', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid spot id' });
+    }
+
+    const spot = await ParkingSpot.findById(id).lean();
+    if (!spot) return res.status(404).json({ message: 'Spot not found' });
+
+    const lot = await ParkingLot.findById(spot.lotId).lean();
+    const reservation = await Reservation.findOne({
+      spotId: spot._id,
+      leavingTimestamp: null,
+    }).lean();
+
+    let user = null;
+    if (reservation && reservation.userId) {
+      user = await User.findById(reservation.userId).lean();
+    }
+
+    const result = {
+      id: spot._id.toString(),
+      lotId: spot.lotId ? spot.lotId.toString() : null,
+      status: spot.status ?? 'A',
+      label: spot.label ?? (spot.spotIndex ? `${lot ? lot.primeLocationName.charAt(0).toUpperCase() : 'Lot'}-${spot.spotIndex}` : null),
+      lotName: lot ? lot.primeLocationName : null,
+      price: lot ? lot.price : null,
+      vehicleNumber: reservation ? reservation.vehicleNumber : null,
+      parkingTimestamp: reservation ? reservation.parkingTimestamp : null,
+      leavingTimestamp: reservation ? reservation.leavingTimestamp : null,
+      parkingCost: reservation ? reservation.parkingCost : null,
+      userId: user ? user._id.toString() : null,
+      username: user ? user.username : null,
+    };
+
+    return res.json(result);
+  } catch (err) {
+    console.error('GET /spots/:id/details error:', err);
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;=== ADMIN ===
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const ParkingLot = require('../models/ParkingLot');
+const ParkingSpot = require('../models/ParkingSpot');
+const Reservation = require('../models/Reservation');
+const User = require('../models/User');
+const router = express.Router();
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this';
+
+const isAdmin = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ message: 'Admin access required' });
+    }
+    req.user = user;
+    next();
+  } catch (err) {
+    res.status(401).json({ message: 'Token is not valid' });
+  }
+};
+
+router.get('/summary', async (req, res) => {
+  try {
+    // Fetch all completed reservations with populations
+    const reservations = await Reservation.find({ leavingTimestamp: { $ne: null } })
+      .populate({
+        path: 'spotId',
+        select: 'lotId',
+        populate: { path: 'lotId', select: 'primeLocationName' }
+      })
+      .populate('userId', 'username')
+      .lean();
+
+    // Fetch all lots and users for names
+    const lots = await ParkingLot.find().lean();
+    const users = await User.find().lean();
+
+    const userRevenues = {};
+    const lotRevenues = {};
+    let totalRevenue = 0;
+
+    for (const r of reservations) {
+      const cost = (r.parkingCost && typeof r.parkingCost === 'number') ? r.parkingCost : 0;
+      if (cost > 0) {
+        totalRevenue += cost;
+
+        // User revenue
+        const uid = r.userId?._id?.toString() || 'unknown';
+        if (!userRevenues[uid]) {
+          const user = users.find(u => u._id.toString() === uid);
+          userRevenues[uid] = {
+            userId: uid,
+            username: user ? user.username : 'Unknown',
+            revenue: 0
+          };
+        }
+        userRevenues[uid].revenue += cost;
+
+        // Lot revenue
+        const spot = r.spotId;
+        if (spot && spot.lotId) {
+          const lid = spot.lotId._id.toString();
+          if (!lotRevenues[lid]) {
+            const lot = lots.find(l => l._id.toString() === lid);
+            lotRevenues[lid] = {
+              lotId: lid,
+              lotName: lot ? lot.primeLocationName : 'Unknown',
+              revenue: 0
+            };
+          }
+          lotRevenues[lid].revenue += cost;
+        }
+      }
+    }
+
+    // Spots summary
+    const totalSpots = await ParkingSpot.countDocuments();
+    const availableSpots = await ParkingSpot.countDocuments({ status: 'A' });
+    const occupiedSpots = totalSpots - availableSpots;
+
+    res.json({
+      userRevenues: Object.values(userRevenues), // Array of {userId, username, revenue}
+      lotRevenues: Object.values(lotRevenues), // Array of {lotId, lotName, revenue}
+      totalRevenue: totalRevenue, // Matches frontend key
+      occupiedSpots,
+      availableSpots,
+    });
+  } catch (err) {
+    console.error('Summary error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/lots', isAdmin, async (req, res) => {
+  try {
+    const { primeLocationName, price, address, pinCode, maximumNumberOfSpots } = req.body;
+    if (!primeLocationName || !price || !address || !pinCode || !maximumNumberOfSpots) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+    const lot = new ParkingLot(req.body);
+    await lot.save();
+
+    // Create spots with label
+    for (let i = 1; i <= maximumNumberOfSpots; i++) {
+      const label = lot.primeLocationName.charAt(0).toUpperCase() + '-' + i;
+      const spot = new ParkingSpot({
+        lotId: lot._id,
+        spotIndex: i,
+        status: 'A',
+        label: label
+      });
+      await spot.save();
+    }
+
+    res.status(201).json(lot);
+  } catch (err) {
+    console.error('POST /lots error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+router.put('/lots/:id', isAdmin, async (req, res) => {
+  try {
+    const lot = await ParkingLot.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!lot) return res.status(404).json({ message: 'Lot not found' });
+    res.json(lot);
+  } catch (err) {
+    console.error('PUT /lots/:id error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/lots/:id', isAdmin, async (req, res) => {
+  try {
+    const lot = await ParkingLot.findByIdAndDelete(req.params.id);
+    if (!lot) return res.status(404).json({ message: 'Lot not found' });
+
+    await ParkingSpot.deleteMany({ lotId: lot._id });
+    await Reservation.deleteMany({ spotId: { $in: await ParkingSpot.find({ lotId: lot._id }, '_id') } });
+
+    res.json({ message: 'Lot deleted' });
+  } catch (err) {
+    console.error('DELETE /lots/:id error:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put('/reservations/:id/release', isAdmin, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+    const reservation = await Reservation.findOne({ _id: req.params.id, userId, leavingTimestamp: null });
+    if (!reservation) {
+      return res.status(404).json({ message: 'Reservation not found or already released' });
+    }
+
+    const spot = await ParkingSpot.findById(reservation.spotId).populate('lotId');
+    if (!spot || !spot.lotId) {
+      return res.status(400).json({ message: 'Invalid spot or lot' });
+    }
+    const lot = spot.lotId;
+
+    const now = new Date();
+    const parkingTime = new Date(reservation.parkingTimestamp);
+    if (isNaN(parkingTime.getTime()) || parkingTime > now) {
+      return res.status(400).json({ message: 'Invalid parking timestamp' });
+    }
+    let duration = (now - parkingTime) / (1000 * 60 * 60);
+    duration = Math.max(duration, 1 / 60);
+
+    const pricePerHour = lot.price || 2;
+    const parkingCost = duration * pricePerHour;
+
+    reservation.parkingCost = parkingCost;
+    reservation.leavingTimestamp = now;
+    await reservation.save();
+
+    spot.status = 'A';
+    await spot.save();
+
+    res.json({ ...reservation.toObject(), cost: parkingCost });
+  } catch (err) {
+    console.error('Release spot error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+module.exports = router;=== MAIN ===
+// lib/main.dart
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'screens/login_screen.dart';
+import 'screens/admin_dashboard_screen.dart';
+import 'screens/user_dashboard_screen.dart';
+import 'screens/register_screen.dart';
+import 'services/auth_service.dart';
+import 'services/session_service.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => SessionService()),
+      ],
+      child: MaterialApp(
+        title: 'Parking Management System',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+          scaffoldBackgroundColor: Colors.grey[100],
+          fontFamily: 'Roboto',
+        ),
+        debugShowCheckedModeBanner: false, // Remove debug banner
+        home: Consumer<AuthService>(
+          builder: (context, auth, child) {
+            if (auth.isLoggedIn) {
+              if (auth.userRole == 'admin') {
+                return AdminDashboardScreen();
+              } else {
+                return UserDashboardScreen();
+              }
+            }
+            return LoginScreen();
+          },
+        ),
+        routes: {
+          '/login': (context) => LoginScreen(),
+          '/register': (context) => RegisterScreen(),
+          '/admin': (context) => AdminDashboardScreen(),
+          '/user': (context) => UserDashboardScreen(),
+        },
+      ),
+    );
+  }
+}=== API SERVICE ===
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/browser_client.dart' as browser;
+import '../models/parking_lot.dart';
+import '../models/reservation.dart';
+import '../models/user.dart';
+
+class ApiService {
+  static const String baseUrl = 'http://localhost:3000/api';
+
+  static final http.Client _client = kIsWeb
+      ? browser.BrowserClient()
+      : http.Client();
+
+  static String? _authToken;
+  static void setAuthToken(String? token) => _authToken = token;
+
+  static Map<String, String> _headers([String? token]) {
+    final headers = <String, String>{'Content-Type': 'application/json'};
+    final authToken = token ?? _authToken;
+    if (authToken != null && authToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+    return headers;
+  }
+
+  static Uri _uri(String path) => Uri.parse('$baseUrl$path');
+
+  static Future<http.Response> _get(String path, {String? token}) =>
+      _client.get(_uri(path), headers: _headers(token));
+
+  static Future<http.Response> _post(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+  }) => _client.post(
+    _uri(path),
+    headers: _headers(token),
+    body: jsonEncode(body),
+  );
+
+  static Future<http.Response> _put(
+    String path,
+    Map<String, dynamic> body, {
+    String? token,
+  }) =>
+      _client.put(_uri(path), headers: _headers(token), body: jsonEncode(body));
+
+  static Future<http.Response> _delete(String path, {String? token}) =>
+      _client.delete(_uri(path), headers: _headers(token));
+
+  static T _handleResponse<T>(
+    http.Response response,
+    T Function(Map<String, dynamic>) onSuccess,
+    T defaultValue,
+  ) {
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return onSuccess(data);
+    } else if (response.statusCode == 401) {
+      print(
+        'Unauthorized request to ${response.request?.url}. Token may be invalid or expired.',
+      );
+      return defaultValue;
+    }
+    print(
+      'Request failed with status ${response.statusCode}: ${response.body}',
+    );
+    return defaultValue;
+  }
+
+  static Future<List<ParkingLot>> getParkingLots({
+    String? query,
+    String? token,
+  }) async {
+    try {
+      final params = <String, String>{
+        '_t': DateTime.now().millisecondsSinceEpoch.toString(),
+      };
+      if (query != null && query.isNotEmpty) {
+        params['query'] = query;
+      }
+      final res = await _get('/lots?${Uri(queryParameters: params).query}', token: token);
+      print('GET /lots status: ${res.statusCode}, body: ${res.body}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List<dynamic>) {
+          return data.map((item) => ParkingLot.fromJson(item)).toList();
+        }
+        print('Invalid data type: ${data.runtimeType}');
+        return [];
+      }
+      return [];
+    } catch (e) {
+      print('getParkingLots error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getSpotsWithDetails({String? token}) async {
+    try {
+      final res = await _get('/spots/details', token: token);
+      print('GET /spots/details status: ${res.statusCode}, body: ${res.body}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List<dynamic>) return data.cast<Map<String, dynamic>>();
+        print('Invalid data type: ${data.runtimeType}');
+        return [];
+      }
+      return [];
+    } catch (e) {
+      print('getSpotsWithDetails error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<dynamic>> getReservations({
+    String? userId,
+    String? token,
+  }) async {
+    try {
+      final res = await _get('/reservations', token: token);
+      print('GET /reservations status: ${res.statusCode}, body: ${res.body}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data is List<dynamic>) return data;
+        print('Invalid data type: ${data.runtimeType}');
+        return [];
+      }
+      return [];
+    } catch (e) {
+      print('getReservations error: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSummary({String? token}) async {
+    try {
+      final res = await _get('/admin/summary', token: token);
+      print('GET /summary status: ${res.statusCode}, body: ${res.body}');
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (e) {
+      print('getSummary error: $e');
+      return {};
+    }
+  }
+
+  static Future<ParkingLot?> createParkingLot(
+    Map<String, dynamic> data, {
+    String? token,
+  }) async {
+    try {
+      final res = await _post('/admin/lots', data, token: token);
+      print('POST /lots status: ${res.statusCode}, body: ${res.body}');
+      if (res.statusCode == 201) {
+        final jsonData = jsonDecode(res.body) as Map<String, dynamic>;
+        return ParkingLot.fromJson(jsonData);
+      }
+      return null;
+    } catch (e) {
+      print('createParkingLot error: $e');
+      return null;
+    }
+  }
+
+  static Future<bool> updateParkingLot(
+    String id,
+    Map<String, dynamic> data, {
+    String? token,
+  }) async {
+    try {
+      final res = await _put('/admin/lots/$id', data, token: token);
+      print('PUT /lots/$id status: ${res.statusCode}, body: ${res.body}');
+      return res.statusCode == 200;
+    } catch (e) {
+      print('updateParkingLot error: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> deleteParkingLot(
+    String id, {
+    String? token,
+  }) async {
+    try {
+      final res = await _delete('/admin/lots/$id', token: token);
+      print('DELETE /lots/$id status: ${res.statusCode}, body: ${res.body}');
+      return res.statusCode == 200;
+    } catch (e) {
+      print('deleteParkingLot error: $e');
+      return false;
+    }
+  }
+
+  static Future<http.Response> getSpotDetails(
+    String spotId, {
+    String? token,
+  }) async {
+    try {
+      final res = await _get('/spots/$spotId/details', token: token);
+      print('GET /spots/$spotId/details status: ${res.statusCode}, body: ${res.body}');
+      return res;
+    } catch (e) {
+      print('getSpotDetails error: $e');
+      return http.Response('{"error": "$e"}', 500);
+    }
+  }
+
+  static Future<User?> login(String username, String password) async {
+    final res = await _post('/auth/login', {
+      'username': username,
+      'password': password,
+    }, token: '');
+
+    return _handleResponse<User?>(res, (data) {
+      final user = User.fromJson(data);
+      setAuthToken(user.token);
+      return user;
+    }, null);
+  }
+
+  static void logout() {
+    setAuthToken(null);
+  }
+
+  static Future<Map<String, dynamic>?> releaseReservation(String resvId, {String? token}) async {
+    if (resvId.isEmpty) {
+      print('releaseReservation: Empty resvId, skipping.');
+      return null;
+    }
+
+    try {
+      final res = await _put('/reservations/$resvId/release', {}, token: token);
+      print('PUT /reservations/$resvId/release - Status: ${res.statusCode} - Body: ${res.body}');
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body) as Map<String, dynamic>;
+        return data; // e.g., {'message': 'Released', 'cost': 5.25}
+      }
+      return null;
+    } catch (e) {
+      print('releaseReservation error: $e');
+      return null;
+    }
+  }
+
+  static Future<User?> register(
+    String username,
+    String password,
+    String role,
+  ) async {
+    final res = await _post('/auth/register', {
+      'username': username,
+      'password': password,
+      'role': role,
+    }, token: '');
+    print('POST /auth/register status: ${res.statusCode}');
+    if (res.statusCode == 201) {
+      final user = User.fromJson(jsonDecode(res.body));
+      setAuthToken(user.token);
+      return user;
+    }
+    return null;
+  }
+
+  static Future<bool> reserveSpot(
+    String lotId,
+    String vehicleNumber, {
+    String? token,
+  }) async {
+    try {
+      final data = {'lotId': lotId, 'vehicleNumber': vehicleNumber};
+      final res = await _post('/reservations', data, token: token);
+      print('POST /reservations status: ${res.statusCode}, body: ${res.body}');
+      return res.statusCode == 201;
+    } catch (e) {
+      print('reserveSpot error: $e');
+      return false;
+    }
+  }
+}=== AUTH SERVICE ===
+// lib/services/auth_service.dart
+import 'package:flutter/material.dart';
+import '../models/user.dart';
+import 'api_service.dart';
+
+class AuthService extends ChangeNotifier {
+  User? _user;
+  bool get isLoggedIn => _user != null;
+  String? get userRole => _user?.role;
+  String? get userId => _user?.id;
+  String? get token => _user?.token; // Added token getter
+
+  Future<bool> login(String username, String password) async {
+    final user = await ApiService.login(username, password);
+    if (user != null && user.id.isNotEmpty) {
+      // FIXED: Check for non-empty ID
+      _user = user;
+      ApiService.setAuthToken(user.token);
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> register(String username, String password, String role) async {
+    final user = await ApiService.register(username, password, role);
+    if (user != null && user.id.isNotEmpty) {
+      // FIXED: Check for non-empty ID
+      _user = user;
+      ApiService.setAuthToken(user.token);
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  void logout() {
+    _user = null;
+    notifyListeners();
+  }
+}
+=== PUBSPEC ===
+name: parking_app
+description: "A new Flutter project."
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  # Parking app specific dependencies
+  sqflite: ^2.4.2
+  path: ^1.9.1
+  intl: ^0.20.2
+  flutter_secure_storage: ^9.2.4
+  provider: ^6.1.5+1
+  http: ^1.5.0
+  socket_io_client: ^3.1.2
+  shared_preferences: ^2.5.3
+  fl_chart: ^1.1.1
+  razorpay_flutter: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  # The "flutter_lints" package below contains a set of recommended lints to
+  # encourage good coding practices. The lint set provided by the package is
+  # activated in the `analysis_options.yaml` file located at the root of your
+  # package. See that file for information about deactivating specific lint
+  # rules and activating additional ones.
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # To add assets to your application, add an assets section, like this:
+  # assets:
+  #   - images/a_dot_burr.jpeg
+  #   - images/a_dot_ham.jpeg
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package
+
+  === PACKAGE JSON ===
+{
+  "name": "parking-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "express-session": "^1.17.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^6.9.0",
+    "razorpay": "^2.9.6"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  }
+}
