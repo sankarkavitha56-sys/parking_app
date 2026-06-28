@@ -9,7 +9,7 @@ class EditLotScreen extends StatefulWidget {
   const EditLotScreen({super.key, required this.lot, required this.onUpdated});
 
   @override
-  _EditLotScreenState createState() => _EditLotScreenState();
+  State<EditLotScreen> createState() => _EditLotScreenState();
 }
 
 class _EditLotScreenState extends State<EditLotScreen> {
@@ -86,6 +86,7 @@ class _EditLotScreenState extends State<EditLotScreen> {
     // Fix String? to String conversion for lot.id
     await ApiService.updateParkingLot(widget.lot.id ?? '', data);
     widget.onUpdated();
+    if (!mounted) return;
     Navigator.pop(context);
   }
 }

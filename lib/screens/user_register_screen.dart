@@ -5,8 +5,10 @@ import '../services/auth_service.dart';
 import 'login_screen.dart';
 
 class UserRegisterScreen extends StatefulWidget {
+  const UserRegisterScreen({super.key});
+
   @override
-  _UserRegisterScreenState createState() => _UserRegisterScreenState();
+  State<UserRegisterScreen> createState() => _UserRegisterScreenState();
 }
 
 class _UserRegisterScreenState extends State<UserRegisterScreen> {
@@ -150,6 +152,7 @@ class _UserRegisterScreenState extends State<UserRegisterScreen> {
             _passwordController.text,
             'user',
           );
+      if (!mounted) return;
       if (success) {
         Navigator.pushReplacementNamed(context, '/user');
       } else {

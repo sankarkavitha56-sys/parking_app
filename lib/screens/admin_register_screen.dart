@@ -5,8 +5,10 @@ import '../services/auth_service.dart';
 import 'login_screen.dart';
 
 class AdminRegisterScreen extends StatefulWidget {
+  const AdminRegisterScreen({super.key});
+
   @override
-  _AdminRegisterScreenState createState() => _AdminRegisterScreenState();
+  State<AdminRegisterScreen> createState() => _AdminRegisterScreenState();
 }
 
 class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
@@ -150,6 +152,7 @@ class _AdminRegisterScreenState extends State<AdminRegisterScreen> {
             _passwordController.text,
             'admin',
           );
+      if (!mounted) return;
       if (success) {
         Navigator.pushReplacementNamed(context, '/admin');
       } else {

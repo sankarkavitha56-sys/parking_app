@@ -18,4 +18,13 @@ userSchema.methods.comparePassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
+// Never expose the password hash (or internal version key) in API responses.
+function sanitizeUser(doc, ret) {
+  delete ret.password;
+  delete ret.__v;
+  return ret;
+}
+userSchema.set('toJSON', { transform: sanitizeUser });
+userSchema.set('toObject', { transform: sanitizeUser });
+
 module.exports = mongoose.model('User', userSchema);

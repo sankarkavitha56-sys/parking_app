@@ -14,6 +14,14 @@ const paymentRoutes = require('./routes/payment');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Warn loudly when running without the secrets required for a secure deployment.
+if (!process.env.JWT_SECRET) {
+  console.warn('WARNING: JWT_SECRET is not set. Using an insecure default. Set JWT_SECRET in production.');
+}
+if (!process.env.MONGODB_URI) {
+  console.warn('WARNING: MONGODB_URI is not set. Falling back to mongodb://localhost:27017/parking.');
+}
+
 mongoose.set('strictQuery', false);
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/parking';

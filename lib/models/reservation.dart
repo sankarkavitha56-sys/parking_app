@@ -87,10 +87,13 @@ class Reservation {
     };
   }
 
-  String get formattedParkingTime =>
-      parkingTimestamp != null ? parkingTimestamp!.toLocal().toString() : 'N/A';
+  static final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+  String get formattedParkingTime => parkingTimestamp != null
+      ? _dateFormat.format(parkingTimestamp!.toLocal())
+      : 'N/A';
 
   String get formattedLeavingTime => leavingTimestamp != null
-      ? leavingTimestamp!.toLocal().toString()
+      ? _dateFormat.format(leavingTimestamp!.toLocal())
       : 'Still Parked';
 }
