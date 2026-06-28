@@ -5,11 +5,12 @@ import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/parking_lot.dart';
 import '../models/reservation.dart';
-import '../models/parking_spot.dart';
 
 class UserDashboardScreen extends StatefulWidget {
+  const UserDashboardScreen({super.key});
+
   @override
-  _UserDashboardScreenState createState() => _UserDashboardScreenState();
+  State<UserDashboardScreen> createState() => _UserDashboardScreenState();
 }
 
 class _UserDashboardScreenState extends State<UserDashboardScreen>
@@ -61,13 +62,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       }).toList();
 
       if (lots.isEmpty) {
-        print('No lots loaded. Check API or add sample data.');
+        debugPrint('No lots loaded. Check API or add sample data.');
       }
       spotsWithDetails = await ApiService.getSpotsWithDetails(token: token);
-      if (spotsWithDetails is! List<Map<String, dynamic>>) {
-        print('Invalid spots type: ${spotsWithDetails.runtimeType} - defaulting to []');
-        spotsWithDetails = [];
-      }
       // Format spot codes (1-1 format)
       for (var spot in spotsWithDetails) {
         final lotId = spot['lotId']?.toString() ?? '';
@@ -77,28 +74,28 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
         spot['spotCode'] = '$lotNum-$spotIndex'; // e.g., "1-1"
       }
       if (spotsWithDetails.isEmpty) {
-        print('No spots loaded. Check API or add sample data.');
+        debugPrint('No spots loaded. Check API or add sample data.');
       }
       final reservationsRaw = await ApiService.getReservations(
         userId: userId,
         token: token,
       );
       history = reservationsRaw
-          .where((r) => r is Map<String, dynamic>)
-          .map((r) => Reservation.fromJson(r as Map<String, dynamic>))
-          .whereType<Reservation>()
+          .whereType<Map<String, dynamic>>()
+          .map((r) => Reservation.fromJson(r))
           .toList();
       if (history.isEmpty) {
-        print('No history loaded. Check API or make reservations.');
+        debugPrint('No history loaded. Check API or make reservations.');
       }
       currentReservation = history.firstWhere(
         (r) => r.leavingTimestamp == null,
         orElse: () => Reservation(),
       );
-      summary = await ApiService.getSummary(token: token) ?? {};
-      print('Summary: $summary');
+      summary = await ApiService.getSummary(token: token);
+      debugPrint('Summary: $summary');
     } catch (e) {
-      print('_loadData error: $e');
+      debugPrint('_loadData error: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Load failed: $e. Check console for details.')),
       );
@@ -122,6 +119,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       _vehicleController.text,
       token: token,
     );
+    if (!mounted) return;
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Spot reserved successfully!')),
@@ -143,6 +141,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
     final auth = context.read<AuthService>();
     final token = auth.token;
     final response = await ApiService.releaseReservation(res.id!, token: token);
+    if (!mounted) return;
     if (response != null && response['message'] == 'Released') {
       final cost = (response['cost'] as num?)?.toDouble() ?? 0.0;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -213,7 +212,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                         icon: Container(
                           padding: EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(Icons.refresh, color: Colors.white),
@@ -227,7 +226,7 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                         child: Container(
                           padding: EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.2),
+                            color: Colors.red.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(Icons.logout, color: Colors.white),
@@ -323,8 +322,8 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 final lotNumber = lot.lotNumber ?? (index + 1).toString(); // Sequential 1,2,3...
                 final availability = lot.availability ?? '0/0';
                 final availSplit = availability.split('/');
-                final avail = int.tryParse(availSplit[0] ?? '0') ?? 0;
-                final total = int.tryParse(availSplit[1] ?? '0') ?? 0;
+                final avail = int.tryParse(availSplit.isNotEmpty ? availSplit[0] : '0') ?? 0;
+                final total = int.tryParse(availSplit.length > 1 ? availSplit[1] : '0') ?? 0;
                 final isFull = avail == 0;
                 return Container(
                   margin: EdgeInsets.only(bottom: 12),
@@ -623,7 +622,6 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
   Widget _buildSummaryTab() {
     final occupied = (summary['occupiedSpots'] ?? 0).toDouble();
     final available = (summary['availableSpots'] ?? 0).toDouble();
-    final total = occupied + available;
 
     return Container(
       padding: EdgeInsets.all(16),
@@ -690,9 +688,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       width: 120,
       padding: EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -714,10 +712,10 @@ class DoughnutChart extends StatelessWidget {
   final double available;
 
   const DoughnutChart({
-    Key? key,
+    super.key,
     required this.occupied,
     required this.available,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

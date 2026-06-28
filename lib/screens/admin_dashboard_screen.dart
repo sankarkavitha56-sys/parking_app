@@ -2,12 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/parking_lot.dart';
-import '../models/parking_spot.dart';
-import 'add_lot_screen.dart';
 import 'edit_lot_screen.dart';
 import 'spot_details_screen.dart';
 
@@ -15,7 +12,7 @@ class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
 
   @override
-  _AdminDashboardScreenState createState() => _AdminDashboardScreenState();
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen>
@@ -72,24 +69,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       }).toList();
 
       final fetchedSpots = await ApiService.getSpotsWithDetails(token: token);
-      spotsWithDetails = fetchedSpots is List<Map<String, dynamic>>
-          ? fetchedSpots.map((spot) {
-              // Find lot number
-              final lotId = spot['lotId']?.toString() ?? '';
-              final matchingLot = lots.firstWhere((lot) => lot.id == lotId, orElse: () => ParkingLot());
-              final lotNum = matchingLot.lotNumber ?? 'N/A';
-              final spotIndex = spot['spotIndex'] ?? 1; // From backend, fallback 1
-              spot['spotCode'] = '$lotNum-$spotIndex'; // e.g., "1-1"
-              return spot;
-            }).toList()
-          : [];
+      spotsWithDetails = fetchedSpots.map((spot) {
+        // Find lot number
+        final lotId = spot['lotId']?.toString() ?? '';
+        final matchingLot = lots.firstWhere((lot) => lot.id == lotId, orElse: () => ParkingLot());
+        final lotNum = matchingLot.lotNumber ?? 'N/A';
+        final spotIndex = spot['spotIndex'] ?? 1; // From backend, fallback 1
+        spot['spotCode'] = '$lotNum-$spotIndex'; // e.g., "1-1"
+        return spot;
+      }).toList();
 
-      final fetchedSummary = await ApiService.getSummary(token: token);
-      summary = fetchedSummary ?? {};
+      summary = await ApiService.getSummary(token: token);
 
       if (mounted) setState(() {});
     } catch (e) {
-      print('LoadData error: $e');
+      debugPrint('LoadData error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Load failed: $e. Check backend/DB seed.')),
@@ -156,7 +150,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         icon: Container(
                           padding: EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(Icons.refresh, color: Colors.white),
@@ -170,7 +164,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         child: Container(
                           padding: EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.2),
+                            color: Colors.red.withValues(alpha: 0.2),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(Icons.logout, color: Colors.white),
@@ -361,12 +355,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final totalRevenue = (summary['totalRevenue'] ?? 0).toDouble();
 
     // Handle array format from backend
-    final userList = userRevenuesRaw is List 
-      ? (userRevenuesRaw as List).cast<Map<String, dynamic>>() 
-      : [];
-    final lotList = lotRevenuesRaw is List 
-      ? (lotRevenuesRaw as List).cast<Map<String, dynamic>>() 
-      : [];
+    final userList = userRevenuesRaw is List
+      ? userRevenuesRaw.cast<Map<String, dynamic>>()
+      : <Map<String, dynamic>>[];
+    final lotList = lotRevenuesRaw is List
+      ? lotRevenuesRaw.cast<Map<String, dynamic>>()
+      : <Map<String, dynamic>>[];
 
     return Container(
       padding: EdgeInsets.all(16),
@@ -491,6 +485,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     );
     if (confirm == true) {
       final success = await ApiService.deleteParkingLot(id);
+      if (!mounted) return;
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lot deleted!')));
         _loadData();
@@ -507,10 +502,10 @@ class DoughnutChart extends StatelessWidget {
   final double available;
 
   const DoughnutChart({
-    Key? key,
+    super.key,
     required this.occupied,
     required this.available,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

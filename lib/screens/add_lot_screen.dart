@@ -1,14 +1,13 @@
 // lib/screens/add_lot_screen.dart
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import '../models/parking_lot.dart';
 
 class AddLotScreen extends StatefulWidget {
   final VoidCallback? onAdded; // Made optional
-  const AddLotScreen({Key? key, this.onAdded}) : super(key: key);
+  const AddLotScreen({super.key, this.onAdded});
 
   @override
-  _AddLotScreenState createState() => _AddLotScreenState();
+  State<AddLotScreen> createState() => _AddLotScreenState();
 }
 
 class _AddLotScreenState extends State<AddLotScreen> {
@@ -23,12 +22,12 @@ class _AddLotScreenState extends State<AddLotScreen> {
   @override
   void initState() {
     super.initState();
-    print('AddLotScreen initState - Building form'); // Debug: Confirm init
+    debugPrint('AddLotScreen initState - Building form'); // Debug: Confirm init
   }
 
   @override
   Widget build(BuildContext context) {
-    print('AddLotScreen build - Rendering'); // Debug: Confirm build calls
+    debugPrint('AddLotScreen build - Rendering'); // Debug: Confirm build calls
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -212,9 +211,10 @@ class _AddLotScreenState extends State<AddLotScreen> {
           'pinCode': _pinController.text.trim(),
           'maximumNumberOfSpots': int.parse(_maxSpotsController.text.trim()),
         };
-        print('Sending data to backend: $data');
+        debugPrint('Sending data to backend: $data');
         final lot = await ApiService.createParkingLot(data);
-        print('API Response: $lot'); // Log full response
+        if (!mounted) return;
+        debugPrint('API Response: $lot'); // Log full response
         if (lot != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -241,7 +241,8 @@ class _AddLotScreenState extends State<AddLotScreen> {
           );
         }
       } catch (e) {
-        print('Error adding lot: $e');
+        debugPrint('Error adding lot: $e');
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error: ${e.toString()}'),

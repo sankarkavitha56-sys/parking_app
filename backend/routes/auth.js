@@ -36,6 +36,9 @@ router.post('/register', async (req, res) => {
   try {
     const { username, password, role } = req.body;
     console.log('Register attempt:', username, role); // Debug
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password are required' });
+    }
     if (password.length < 8 || !/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@#$%^&*!])[A-Za-z\d@#$%^&*!]{7,15}$/.test(password)) {
       return res.status(400).json({ message: 'Invalid password format' });
     }

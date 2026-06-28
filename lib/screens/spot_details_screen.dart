@@ -5,10 +5,10 @@ import '../services/api_service.dart';
 
 class SpotDetailsScreen extends StatefulWidget {
   final String spotId;
-  const SpotDetailsScreen({Key? key, required this.spotId}) : super(key: key);
+  const SpotDetailsScreen({super.key, required this.spotId});
 
   @override
-  _SpotDetailsScreenState createState() => _SpotDetailsScreenState();
+  State<SpotDetailsScreen> createState() => _SpotDetailsScreenState();
 }
 
 class _SpotDetailsScreenState extends State<SpotDetailsScreen> {
@@ -24,7 +24,8 @@ class _SpotDetailsScreenState extends State<SpotDetailsScreen> {
   Future<void> _loadSpotDetails() async {
     try {
       final response = await ApiService.getSpotDetails(widget.spotId);
-      print(
+      if (!mounted) return;
+      debugPrint(
         'Spot details response: ${response.statusCode} - ${response.body}',
       ); // Debug log
       if (response.statusCode == 200) {
@@ -46,7 +47,8 @@ class _SpotDetailsScreenState extends State<SpotDetailsScreen> {
         );
       }
     } catch (e) {
-      print('Error loading spot details: $e');
+      debugPrint('Error loading spot details: $e');
+      if (!mounted) return;
       setState(() {
         isLoading = false;
       });

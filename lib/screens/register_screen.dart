@@ -8,7 +8,7 @@ class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  _RegisterScreenState createState() => _RegisterScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
@@ -99,14 +99,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             final regex = RegExp(
                               r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@#$%^&*!])[A-Za-z\d@#$%^&*!]{7,15}$',
                             );
-                            if (!regex.hasMatch(value))
+                            if (!regex.hasMatch(value)) {
                               return 'Must have uppercase, lowercase, digit, special char, 7-15 chars';
+                            }
                             return null;
                           },
                         ),
                         SizedBox(height: 16),
                         DropdownButtonFormField<String>(
-                          value: _selectedRole,
+                          initialValue: _selectedRole,
                           decoration: InputDecoration(
                             labelText: 'Role',
                             prefixIcon: Icon(Icons.security, color: Colors.purple.shade600),
@@ -176,6 +177,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _passwordController.text,
             _selectedRole,
           );
+      if (!mounted) return;
       if (success) {
         final role = context.read<AuthService>().userRole;
         Navigator.pushReplacementNamed(context, '/$role');

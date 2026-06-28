@@ -12,7 +12,7 @@ class SessionService extends ChangeNotifier {
   Future<void> saveUser(User user) async {
     // FIXED: Guard against empty ID
     if (user.id.isEmpty) {
-      print('Warning: Attempted to save user with empty ID. Skipping.');
+      debugPrint('Warning: Attempted to save user with empty ID. Skipping.');
       return;
     }
 

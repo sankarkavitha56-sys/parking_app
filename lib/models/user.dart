@@ -1,4 +1,6 @@
 // lib/models/user.dart
+import 'package:flutter/foundation.dart';
+
 class User {
   final String id;
   final String username;
@@ -17,7 +19,7 @@ class User {
     final userId = json['id'] ?? json['_id'];
     final idStr = userId?.toString() ?? '';
     if (idStr.isEmpty) {
-      print('Warning: User JSON missing valid id/_id. Response: $json');
+      debugPrint('Warning: User JSON missing valid id/_id. Response: $json');
     }
 
     return User(
