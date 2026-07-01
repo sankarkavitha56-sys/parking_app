@@ -1,214 +1,533 @@
-# Smart Parking Management System
+# 🚗 Smart Parking Management System
 
-A full-stack smart parking application built for real-time parking slot management. The project includes separate User and Admin dashboards, JWT-based authentication, MongoDB Atlas storage, and live occupancy updates using Socket.IO.
+A full-stack Smart Parking Management System that allows users to book parking spots and enables administrators to manage parking lots, monitor occupancy, and track revenue in real time.
 
-## Tech Stack
+---
 
-- Flutter Web
+# 📌 Overview
+
+This project digitizes parking management by replacing manual allocation with an online booking system.
+
+The application consists of:
+
+- Flutter Mobile Application
+- Node.js + Express Backend
+- MongoDB Atlas Cloud Database
+- JWT Authentication
+- REST APIs
+
+---
+
+# ✨ Features
+
+## 👤 User
+
+- Register
+- Login
+- JWT Authentication
+- Persistent Login Session
+- View Available Parking Lots
+- View Parking Spots
+- Book Parking Spot
+- Release Parking Spot
+- View Booking Details
+
+---
+
+## 👨‍💼 Admin
+
+- Secure Admin Login
+- Dashboard
+- Create Parking Lot
+- Delete Parking Lot
+- Generate Parking Spots Automatically
+- View All Spots
+- View Spot Status
+- Revenue Analytics
+- Occupancy Analytics
+- Total Revenue Summary
+
+---
+
+# 🏗️ Architecture
+
+```
+                 Flutter App
+                      │
+                      │ REST API
+                      ▼
+              Node.js + Express
+                      │
+          JWT Authentication
+                      │
+                      ▼
+               MongoDB Atlas
+```
+
+---
+
+# 🛠 Tech Stack
+
+## Frontend
+
+- Flutter
+- Provider
+- Shared Preferences
+- HTTP Package
+
+## Backend
+
 - Node.js
 - Express.js
-- MongoDB Atlas
+- JWT
+- Bcrypt
 - Mongoose
-- JWT Authentication
-- Socket.IO
-- Razorpay package dependency for demo payment flow
 
-## Project Overview
+## Database
 
-The Smart Parking Management System helps users find available parking lots, reserve a spot, release the spot after parking, and view parking history. Admins can manage parking lots, monitor occupied and available spots, and view revenue summaries.
+- MongoDB Atlas
 
-This project is designed as a placement-ready full-stack demo. It focuses on clear architecture, role-based access, real-time updates, and a polished interview demo flow.
+## Hosting
 
-## Architecture
+Backend
+- Render
 
-```text
-Flutter Web App
-  |-- Screens
-  |-- Services
-  |-- Models
-  |
-  | HTTP + JWT
-  | Socket.IO
-  v
-Node.js + Express Backend
-  |-- Auth Routes
-  |-- User Routes
-  |-- Admin Routes
-  |-- Payment Routes
-  |-- Socket.IO Events
-  |
-  v
-MongoDB Atlas
-  |-- Users
-  |-- Parking Lots
-  |-- Parking Spots
-  |-- Reservations
-  |-- Bookings
+Database
+- MongoDB Atlas
+
+---
+
+# 📂 Project Structure
+
+```
+smart-parking/
+
+│
+├── backend/
+│   ├── controllers/
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   ├── app.js
+│   └── package.json
+│
+└── frontend/
+    ├── lib/
+    │   ├── models/
+    │   ├── screens/
+    │   ├── services/
+    │   ├── widgets/
+    │   └── main.dart
 ```
 
-## Features
+---
 
-### User
+# 🔐 Authentication Flow
 
-- User registration and login
-- View parking lots with availability
-- Search parking lots
-- Reserve a parking spot
-- Release a parking spot
-- Automatic parking fee calculation
-- Parking history
-- Live dashboard refresh using Socket.IO
+```
+Register/Login
 
-### Admin
+        │
 
-- Admin login
-- Add, edit, and delete parking lots
-- View all parking spots
-- View occupied and available spot count
-- Revenue summary by user and parking lot
-- Realtime updates when parking status changes
+        ▼
 
-### Security
+Backend validates credentials
 
-- Password hashing with bcrypt
-- JWT authentication
-- Role-based access control
-- Admin APIs protected with admin middleware
-- Admin self-registration disabled
+        │
 
-## API Endpoints
+        ▼
 
-### Auth
+JWT Token Generated
 
-```text
-POST /api/auth/register
-POST /api/auth/login
+        │
+
+        ▼
+
+Flutter stores token using
+SharedPreferences
+
+        │
+
+        ▼
+
+Token attached to every API request
+
+        │
+
+        ▼
+
+Backend validates JWT
+
+        │
+
+        ▼
+
+Authorized Response
 ```
 
-### User
+---
 
-```text
-GET  /api/lots
-GET  /api/spots/details
-GET  /api/spots/:id/details
-POST /api/reservations
-GET  /api/reservations
-PUT  /api/reservations/:id/release
-GET  /api/summary
+# 🚘 Parking Booking Flow
+
+```
+User Login
+
+      │
+
+      ▼
+
+View Parking Lots
+
+      │
+
+      ▼
+
+Choose Parking Spot
+
+      │
+
+      ▼
+
+Book Spot
+
+      │
+
+      ▼
+
+Spot Status
+
+Available
+
+↓
+
+Occupied
+
+↓
+
+Vehicle Number Stored
+
+↓
+
+Revenue Starts Calculating
+
+↓
+
+User Releases Spot
+
+↓
+
+Available Again
 ```
 
-### Admin
+---
 
-```text
-GET    /api/admin/summary
-POST   /api/admin/lots
-PUT    /api/admin/lots/:id
-DELETE /api/admin/lots/:id
+# 👨‍💼 Admin Flow
+
+```
+Admin Login
+
+      │
+
+      ▼
+
+Dashboard
+
+      │
+
+      ├── Add Parking Lot
+
+      ├── Delete Parking Lot
+
+      ├── Generate Spots
+
+      ├── Monitor Occupancy
+
+      ├── Revenue Analytics
+
+      └── View All Parking Spots
 ```
 
-### Payment Demo
+---
 
-```text
-POST /api/payment/initiate
-POST /api/payment/confirm
+# 📊 Revenue Calculation
+
+Revenue is calculated based on the parking duration.
+
+```
+Revenue
+
+=
+
+Parking Price
+
+×
+
+Parking Duration
 ```
 
-## Installation
+Example
 
-### Backend
+```
+Price
+
+₹50/hour
+
+Parking Time
+
+2 Hours
+
+Revenue
+
+₹100
+```
+
+---
+
+# 📦 REST APIs
+
+## Authentication
+
+| Method | Endpoint |
+|---------|----------|
+| POST | /api/auth/register |
+| POST | /api/auth/login |
+
+---
+
+## Parking Lots
+
+| Method | Endpoint |
+|---------|----------|
+| GET | /api/lots |
+| POST | /api/lots |
+| DELETE | /api/lots/:id |
+
+---
+
+## Parking Spots
+
+| Method | Endpoint |
+|---------|----------|
+| GET | /api/spots/details |
+| POST | /api/spots/book |
+| POST | /api/spots/release |
+
+---
+
+## Admin
+
+| Method | Endpoint |
+|---------|----------|
+| GET | /api/admin/summary |
+
+---
+
+# 🗄 Database Models
+
+## User
+
+```
+id
+
+username
+
+password
+
+role
+```
+
+---
+
+## Parking Lot
+
+```
+id
+
+primeLocationName
+
+address
+
+pinCode
+
+price
+
+maximumNumberOfSpots
+```
+
+---
+
+## Parking Spot
+
+```
+id
+
+label
+
+status
+
+vehicleNumber
+
+lotId
+```
+
+---
+
+## Reservation
+
+```
+id
+
+userId
+
+spotId
+
+vehicleNumber
+
+entryTime
+
+exitTime
+
+totalCost
+```
+
+---
+
+# 🔄 Session Persistence
+
+After successful login:
+
+```
+JWT Token
+
+↓
+
+Stored in SharedPreferences
+
+↓
+
+App Restart
+
+↓
+
+Session Restored Automatically
+
+↓
+
+User stays Logged In
+```
+
+---
+
+# 🚀 Installation
+
+## Clone
+
+```bash
+git clone <repository-url>
+```
+
+---
+
+## Backend
 
 ```bash
 cd backend
+
 npm install
+
 npm start
 ```
 
-Required environment variables:
+---
 
-```text
-PORT=3000
-MONGODB_URI=your_mongodb_atlas_connection_string
-JWT_SECRET=your_jwt_secret
-```
-
-### Flutter Web
+## Frontend
 
 ```bash
+cd frontend
+
 flutter pub get
-flutter run -d chrome \
-  --dart-define=API_BASE_URL=http://localhost:3000/api \
-  --dart-define=SOCKET_URL=http://localhost:3000
+
+flutter run
 ```
 
-For deployed builds:
+---
 
-```bash
-flutter build web \
-  --dart-define=API_BASE_URL=https://parking-api.onrender.com/api \
-  --dart-define=SOCKET_URL=https://parking-api.onrender.com
+# ⚙ Environment Variables
+
+Create a `.env`
+
+```env
+PORT=5000
+
+MONGO_URI=your_mongodb_connection
+
+JWT_SECRET=your_secret_key
 ```
 
-## Deployment
+---
 
-Suggested deployment:
+# ☁ Deployment
 
-- Backend: Render or Railway
-- Database: MongoDB Atlas
-- Flutter Web: Firebase Hosting, Netlify, or Vercel
+Backend
 
-Example deployed URLs:
+- Render
 
-```text
-Backend: https://parking-api.onrender.com
-Frontend: https://smartparkingdemo.web.app
-```
+Database
 
-## Demo Flow
+- MongoDB Atlas
 
-1. Login as user.
-2. View parking lots.
-3. Reserve a spot.
-4. Confirm that the spot becomes occupied.
-5. Open admin dashboard.
-6. View updated occupancy and revenue summary.
-7. Release the spot.
-8. Confirm payment completed message.
-9. Verify the spot becomes available again.
+---
 
-## Screenshots
+# ⚠ Note
 
-Add screenshots after deployment:
+This project uses the **Render Free Tier**.
 
-```text
-screenshots/login.png
-screenshots/register.png
-screenshots/user-dashboard.png
-screenshots/reserve-spot.png
-screenshots/release-spot.png
-screenshots/admin-dashboard.png
-screenshots/revenue-dashboard.png
-screenshots/realtime-update.png
-screenshots/parking-lot.png
-```
+The backend automatically sleeps after a period of inactivity.
 
-## Resume Summary
+The first API request may take **20–60 seconds** while the server wakes up.
 
-Smart Parking Management System  
-Flutter | Node.js | Express | MongoDB Atlas | JWT | Socket.IO
+Subsequent requests are fast.
 
-- Developed a real-time smart parking application with separate User and Admin dashboards.
-- Implemented JWT Authentication and Role-Based Access Control.
-- Built live parking occupancy updates using Socket.IO.
-- Developed parking reservation and release workflow with automatic parking fee calculation.
-- Created admin analytics dashboard displaying occupancy and revenue reports.
-- Integrated MongoDB Atlas cloud database and prepared the application for online deployment.
+---
 
-## Future Scope
+# 📸 Screenshots
 
-- Real payment gateway verification
-- QR-based entry and exit
-- Sensor-based spot detection
-- Push notifications
-- Mobile app release
-- Advanced analytics
+Add screenshots here.
 
+- Login
+- Register
+- User Dashboard
+- Admin Dashboard
+- Booking Screen
+- Revenue Dashboard
+
+---
+
+# 🔮 Future Improvements
+
+- QR Code Entry
+- Online Payment Gateway
+- Google Maps Integration
+- Parking Reservation Timer
+- Push Notifications
+- License Plate Recognition
+- IoT Sensor Integration
+- Live Parking Availability
+- Admin Analytics Dashboard
+
+---
+
+# 👨‍💻 Author
+
+**Santhosh Kumar**
+
+B.Tech Information Technology
+
+Aspiring Software Engineer & Filmmaker
+
+---
+
+# 📄 License
+
+This project is developed for educational and portfolio purposes.
