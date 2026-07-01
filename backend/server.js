@@ -18,8 +18,9 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE"]
+    origin: "https://parking-demo-santhosh.web.app",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
   }
 });
 
@@ -54,7 +55,19 @@ mongoose.connect(MONGODB_URI)
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Middleware
-app.use(cors({ origin: '*', credentials: true }));
+const corsOptions = {
+  origin: [
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "https://parking-demo-santhosh.web.app"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -91,7 +104,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/health', (req, res) => res.json({ status: 'OK', connected: mongoose.connection.readyState === 1 }));
 
 server.listen(PORT, () => {
-  console.log(`Server on port ${PORT}`);
-  console.log('Socket.IO Enabled');
-  console.log('Test: http://localhost:3000/api/lots');
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log("✅ Socket.IO Enabled");
+
+  if (process.env.NODE_ENV === "production") {
+    console.log("🌐 Production Mode");
+  } else {
+    console.log(`🧪 Test API: http://localhost:${PORT}/api/lots`);
+  }
 });
