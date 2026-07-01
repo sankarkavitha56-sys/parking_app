@@ -5,10 +5,7 @@ import '../models/parking_lot.dart';
 import '../models/user.dart';
 
 class ApiService {
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://parking-api.onrender.com/api',
-  );
+  static const String baseUrl = "https://parking-api-6rdy.onrender.com/api";
 
   // http.Client() already returns a browser-aware client on web.
   static final http.Client _client = http.Client();
@@ -171,9 +168,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getPublicSummary() async {
     try {
       final res = await _get('/summary');
-      debugPrint(
-        'GET /summary status: ${res.statusCode}, body: ${res.body}',
-      );
+      debugPrint('GET /summary status: ${res.statusCode}, body: ${res.body}');
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
