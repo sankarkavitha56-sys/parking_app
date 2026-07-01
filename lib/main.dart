@@ -19,7 +19,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthService()),
+        // Restore any previously saved session (JWT + user) on startup so
+        // users aren't forced to log in again after every app restart.
+        ChangeNotifierProvider(create: (_) => AuthService()..restoreSession()),
         ChangeNotifierProvider(create: (_) => SessionService()),
       ],
       child: MaterialApp(
@@ -33,6 +35,11 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false, // Remove debug banner
         home: Consumer<AuthService>(
           builder: (context, auth, child) {
+            if (!auth.isInitialized) {
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+            }
             if (auth.isLoggedIn) {
               if (auth.userRole == 'admin') {
                 return AdminDashboardScreen();

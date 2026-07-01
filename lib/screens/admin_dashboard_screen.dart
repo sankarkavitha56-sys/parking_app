@@ -429,6 +429,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
     final userRevenuesRaw = summary['userRevenues'] ?? [];
     final lotRevenuesRaw = summary['lotRevenues'] ?? [];
     final totalRevenue = (summary['totalRevenue'] ?? 0).toDouble();
+    final occupiedSpots = (summary['occupiedSpots'] ?? 0).toDouble();
+    final availableSpots = (summary['availableSpots'] ?? 0).toDouble();
 
     // Handle array format from backend
     final userList = userRevenuesRaw is List
@@ -476,6 +478,77 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         fontWeight: FontWeight.bold,
                         color: Colors.green.shade600,
                       ),
+                    ),
+                    SizedBox(height: 24),
+                    // Occupied / Available spots overview
+                    Row(
+                      children: [
+                        Icon(Icons.local_parking, color: Colors.blue.shade600, size: 24),
+                        SizedBox(width: 10),
+                        Text(
+                          'Spot Occupancy',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          height: 140,
+                          width: 140,
+                          child: DoughnutChart(
+                            occupied: occupiedSpots,
+                            available: availableSpots,
+                          ),
+                        ),
+                        SizedBox(width: 24),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFF6B6B),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Occupied: ${occupiedSpots.toInt()}',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4CAF50),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Available: ${availableSpots.toInt()}',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                     SizedBox(height: 24),
                     // Users Revenue Table

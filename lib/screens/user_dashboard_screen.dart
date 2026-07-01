@@ -119,7 +119,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
         (r) => r.leavingTimestamp == null,
         orElse: () => Reservation(),
       );
-      summary = await ApiService.getSummary(token: token);
+      // Regular users can't call the admin-only /admin/summary endpoint;
+      // use the public spot-count summary instead.
+      summary = await ApiService.getPublicSummary();
       debugPrint('Summary: $summary');
     } catch (e) {
       debugPrint('_loadData error: $e');

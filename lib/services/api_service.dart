@@ -147,16 +147,39 @@ class ApiService {
     }
   }
 
+  // Admin-only summary: revenue breakdown + occupied/available spot counts.
+  // Requires an admin JWT (backend route is protected by isAdmin).
   static Future<Map<String, dynamic>> getSummary({String? token}) async {
     try {
       final res = await _get('/admin/summary', token: token);
-      debugPrint('GET /summary status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'GET /admin/summary status: ${res.statusCode}, body: ${res.body}',
+      );
       if (res.statusCode == 200) {
         return jsonDecode(res.body) as Map<String, dynamic>;
       }
       return {};
     } catch (e) {
       debugPrint('getSummary error: $e');
+      return {};
+    }
+  }
+
+  // Public summary: occupied/available spot counts only, no auth required.
+  // Used by the regular User dashboard, which is not allowed to call
+  // the admin-only /admin/summary endpoint.
+  static Future<Map<String, dynamic>> getPublicSummary() async {
+    try {
+      final res = await _get('/summary');
+      debugPrint(
+        'GET /summary status: ${res.statusCode}, body: ${res.body}',
+      );
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {};
+    } catch (e) {
+      debugPrint('getPublicSummary error: $e');
       return {};
     }
   }

@@ -45,11 +45,11 @@ router.post('/register', async (req, res) => {
     if (!['user', 'admin'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
-    if (role === 'admin') {
-      return res.status(403).json({
-        message: 'Admin registration is disabled. Please use the manually created admin account.',
-      });
-    }
+    //if (role === 'admin') {
+     //return res.status(403).json({
+      //  message: 'Admin registration is disabled. Please use the manually created admin account.',
+     // });
+    //}
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ message: 'Username exists' });
