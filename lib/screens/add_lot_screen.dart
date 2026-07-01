@@ -1,5 +1,7 @@
 // lib/screens/add_lot_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../services/api_service.dart';
 
 class AddLotScreen extends StatefulWidget {
@@ -75,7 +77,11 @@ class _AddLotScreenState extends State<AddLotScreen> {
                         key: _formKey,
                         child: Column(
                           children: [
-                            Icon(Icons.add_location_alt, size: 64, color: Colors.blue.shade600),
+                            Icon(
+                              Icons.add_location_alt,
+                              size: 64,
+                              color: Colors.blue.shade600,
+                            ),
                             SizedBox(height: 16),
                             Text(
                               'New Parking Lot',
@@ -93,9 +99,13 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                prefixIcon: Icon(Icons.location_on, color: Colors.blue.shade600),
+                                prefixIcon: Icon(
+                                  Icons.location_on,
+                                  color: Colors.blue.shade600,
+                                ),
                               ),
-                              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                              validator: (v) =>
+                                  v?.isEmpty ?? true ? 'Required' : null,
                             ),
                             SizedBox(height: 16),
                             TextFormField(
@@ -105,13 +115,22 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                prefixIcon: Icon(Icons.attach_money, color: Colors.green.shade600),
+                                prefixIcon: Icon(
+                                  Icons.attach_money,
+                                  color: Colors.green.shade600,
+                                ),
                               ),
-                              keyboardType: TextInputType.numberWithOptions(decimal: true),
+                              keyboardType: TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
                               validator: (v) {
-                                if (v?.isEmpty ?? true) return 'Required';
+                                if (v?.isEmpty ?? true) {
+                                  return 'Required';
+                                }
                                 final num = double.tryParse(v!);
-                                if (num == null || num <= 0) return 'Must be positive number';
+                                if (num == null || num <= 0) {
+                                  return 'Must be positive number';
+                                }
                                 return null;
                               },
                             ),
@@ -123,9 +142,13 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                prefixIcon: Icon(Icons.home, color: Colors.orange.shade600),
+                                prefixIcon: Icon(
+                                  Icons.home,
+                                  color: Colors.orange.shade600,
+                                ),
                               ),
-                              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                              validator: (v) =>
+                                  v?.isEmpty ?? true ? 'Required' : null,
                             ),
                             SizedBox(height: 16),
                             TextFormField(
@@ -135,10 +158,14 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                prefixIcon: Icon(Icons.pin_drop, color: Colors.red.shade600),
+                                prefixIcon: Icon(
+                                  Icons.pin_drop,
+                                  color: Colors.red.shade600,
+                                ),
                               ),
                               keyboardType: TextInputType.number,
-                              validator: (v) => v?.isEmpty ?? true ? 'Required' : null,
+                              validator: (v) =>
+                                  v?.isEmpty ?? true ? 'Required' : null,
                             ),
                             SizedBox(height: 16),
                             TextFormField(
@@ -148,13 +175,20 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                prefixIcon: Icon(Icons.local_parking, color: Colors.purple.shade600),
+                                prefixIcon: Icon(
+                                  Icons.local_parking,
+                                  color: Colors.purple.shade600,
+                                ),
                               ),
                               keyboardType: TextInputType.number,
                               validator: (v) {
-                                if (v?.isEmpty ?? true) return 'Required';
+                                if (v?.isEmpty ?? true) {
+                                  return 'Required';
+                                }
                                 final num = int.tryParse(v!);
-                                if (num == null || num <= 0) return 'Must be positive integer';
+                                if (num == null || num <= 0) {
+                                  return 'Must be positive integer';
+                                }
                                 return null;
                               },
                             ),
@@ -174,7 +208,9 @@ class _AddLotScreenState extends State<AddLotScreen> {
                                     ? SizedBox(
                                         height: 20,
                                         width: 20,
-                                        child: CircularProgressIndicator(color: Colors.white),
+                                        child: CircularProgressIndicator(
+                                          color: Colors.white,
+                                        ),
                                       )
                                     : Text(
                                         'Add Lot',
@@ -212,7 +248,8 @@ class _AddLotScreenState extends State<AddLotScreen> {
           'maximumNumberOfSpots': int.parse(_maxSpotsController.text.trim()),
         };
         debugPrint('Sending data to backend: $data');
-        final lot = await ApiService.createParkingLot(data);
+        final token = context.read<AuthService>().token;
+        final lot = await ApiService.createParkingLot(data, token: token);
         if (!mounted) return;
         debugPrint('API Response: $lot'); // Log full response
         if (lot != null) {

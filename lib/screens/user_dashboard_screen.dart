@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
+import '../services/socket_service.dart';
 import '../models/parking_lot.dart';
 import '../models/reservation.dart';
 
@@ -30,15 +31,33 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
   @override
   void initState() {
     super.initState();
+
     _tabController = TabController(length: 3, vsync: this);
+
+    final token = context.read<AuthService>().token;
+
+    if (token != null) {
+      SocketService.instance.connect(token);
+
+      SocketService.instance.listen((_) {
+        if (!mounted) return;
+
+        debugPrint("parkingUpdated received");
+
+        _loadData();
+      });
+    }
+
     _loadData();
   }
 
   @override
   void dispose() {
+    SocketService.instance.disconnect();
     _tabController.dispose();
     _searchController.dispose();
     _vehicleController.dispose();
+
     super.dispose();
   }
 
@@ -50,14 +69,20 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
     final token = auth.token;
 
     try {
-      final fetchedLots = await ApiService.getParkingLots(query: query, token: token);
+      final fetchedLots = await ApiService.getParkingLots(
+        query: query,
+        token: token,
+      );
       // Sort lots by ID for consistent sequential numbering
-      final sortedLots = fetchedLots..sort((a, b) => (a.id ?? '').compareTo(b.id ?? ''));
+      final sortedLots = fetchedLots
+        ..sort((a, b) => (a.id ?? '').compareTo(b.id ?? ''));
       // Assign sequential lot numbers
       lots = sortedLots.asMap().entries.map((entry) {
         final lot = entry.value;
         lot.lotNumber = (entry.key + 1).toString(); // 1, 2, 3...
-        lot.code = lot.code ?? 'LOT-${lot.id?.substring(0, 4).toUpperCase() ?? 'N/A'}'; // Keep for fallback if needed
+        lot.code =
+            lot.code ??
+            'LOT-${lot.id?.substring(0, 4).toUpperCase() ?? 'N/A'}'; // Keep for fallback if needed
         return lot;
       }).toList();
 
@@ -68,7 +93,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       // Format spot codes (1-1 format)
       for (var spot in spotsWithDetails) {
         final lotId = spot['lotId']?.toString() ?? '';
-        final matchingLot = lots.firstWhere((lot) => lot.id == lotId, orElse: () => ParkingLot());
+        final matchingLot = lots.firstWhere(
+          (lot) => lot.id == lotId,
+          orElse: () => ParkingLot(),
+        );
         final lotNum = matchingLot.lotNumber ?? 'N/A';
         final spotIndex = spot['spotIndex'] ?? 1;
         spot['spotCode'] = '$lotNum-$spotIndex'; // e.g., "1-1"
@@ -121,15 +149,17 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
     );
     if (!mounted) return;
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Spot reserved successfully!')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Reservation Successful')));
       _vehicleController.clear();
       setState(() => selectedLotId = null);
       await _loadData();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to reserve spot. Check vehicle format.')),
+        SnackBar(
+          content: Text('Failed to reserve spot. Check vehicle format.'),
+        ),
       );
     }
     setState(() => _isLoading = false);
@@ -146,14 +176,17 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
       final cost = (response['cost'] as num?)?.toDouble() ?? 0.0;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Spot released! Cost: ₹${cost.toStringAsFixed(2)}'),
+          content: Text('Payment Completed. Cost: ₹${cost.toStringAsFixed(2)}'),
           backgroundColor: Colors.green,
         ),
       );
       await _loadData();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to release spot.'), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text('Failed to release spot.'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
     setState(() => _isLoading = false);
@@ -165,7 +198,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
     ApiService.logout();
     Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Logged out successfully!'), backgroundColor: Colors.green),
+      SnackBar(
+        content: Text('Logged out successfully!'),
+        backgroundColor: Colors.green,
+      ),
     );
   }
 
@@ -189,7 +225,13 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 gradient: LinearGradient(
                   colors: [Colors.blue.shade600, Colors.blue.shade800],
                 ),
-                boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: SafeArea(
                 child: Padding(
@@ -242,7 +284,13 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
               height: 50,
               decoration: BoxDecoration(
                 color: Colors.white,
-                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
               child: TabBar(
                 controller: _tabController,
@@ -250,7 +298,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 unselectedLabelColor: Colors.grey.shade600,
                 indicatorColor: Colors.blue.shade700,
                 indicatorWeight: 3,
-                labelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                labelStyle: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
                 tabs: [
                   Tab(text: 'Parking Lots'),
                   Tab(text: 'Recent Parking History'),
@@ -264,9 +315,14 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          CircularProgressIndicator(color: Colors.blue.shade600),
+                          CircularProgressIndicator(
+                            color: Colors.blue.shade600,
+                          ),
                           SizedBox(height: 16),
-                          Text('Loading data...', style: TextStyle(color: Colors.grey.shade600)),
+                          Text(
+                            'Loading data...',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
                         ],
                       ),
                     )
@@ -295,7 +351,13 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(25),
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 8, offset: Offset(0, 2))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
             child: TextField(
               controller: _searchController,
@@ -303,7 +365,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 hintText: 'Search Lots...',
                 prefixIcon: Icon(Icons.search, color: Colors.grey.shade600),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 16,
+                ),
               ),
               onChanged: (value) {
                 setState(() {
@@ -315,98 +380,141 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
           ),
           SizedBox(height: 16),
           Expanded(
-            child: ListView.builder(
-              itemCount: lots.length,
-              itemBuilder: (context, index) {
-                final lot = lots[index];
-                final lotNumber = lot.lotNumber ?? (index + 1).toString(); // Sequential 1,2,3...
-                final availability = lot.availability ?? '0/0';
-                final availSplit = availability.split('/');
-                final avail = int.tryParse(availSplit.isNotEmpty ? availSplit[0] : '0') ?? 0;
-                final total = int.tryParse(availSplit.length > 1 ? availSplit[1] : '0') ?? 0;
-                final isFull = avail == 0;
-                return Container(
-                  margin: EdgeInsets.only(bottom: 12),
-                  child: Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        gradient: LinearGradient(
-                          colors: isFull
-                              ? [Colors.red.shade50, Colors.red.shade100]
-                              : [Colors.green.shade50, Colors.green.shade100],
-                        ),
-                      ),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.all(16),
-                        leading: Container(
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isFull ? Colors.red.shade200 : Colors.green.shade200,
-                            shape: BoxShape.circle,
+            child: lots.isEmpty
+                ? _buildEmptyState(
+                    'No Parking Lots',
+                    'Ask the admin to add a parking lot.',
+                    Icons.local_parking,
+                  )
+                : ListView.builder(
+                    itemCount: lots.length,
+                    itemBuilder: (context, index) {
+                      final lot = lots[index];
+                      final lotNumber =
+                          lot.lotNumber ??
+                          (index + 1).toString(); // Sequential 1,2,3...
+                      final availability = lot.availability ?? '0/0';
+                      final availSplit = availability.split('/');
+                      final avail =
+                          int.tryParse(
+                            availSplit.isNotEmpty ? availSplit[0] : '0',
+                          ) ??
+                          0;
+                      final total =
+                          int.tryParse(
+                            availSplit.length > 1 ? availSplit[1] : '0',
+                          ) ??
+                          0;
+                      final isFull = avail == 0;
+                      return Container(
+                        margin: EdgeInsets.only(bottom: 12),
+                        child: Card(
+                          elevation: 4,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          child: Icon(
-                            isFull ? Icons.warning : Icons.check_circle,
-                            color: isFull ? Colors.red.shade700 : Colors.green.shade700,
-                          ),
-                        ),
-                        title: Text(
-                          lot.primeLocationName ?? 'Unknown Lot',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Lot : $lotNumber'), // Sequential 1,2,3...
-                            Text('${lot.address ?? 'N/A'}, ${lot.pinCode ?? 'N/A'}'),
-                            SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(Icons.currency_rupee, size: 14, color: Colors.grey.shade600),
-                                Text('₹${lot.price}/hr', style: TextStyle(fontSize: 14)),
-                              ],
-                            ),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              availability,
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: isFull ? Colors.red.shade700 : Colors.green.shade700,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              gradient: LinearGradient(
+                                colors: isFull
+                                    ? [Colors.red.shade50, Colors.red.shade100]
+                                    : [
+                                        Colors.green.shade50,
+                                        Colors.green.shade100,
+                                      ],
                               ),
                             ),
-                            SizedBox(height: 4),
-                            SizedBox(
-                              width: 60,
-                              height: 4,
-                              child: LinearProgressIndicator(
-                                value: avail / total,
-                                backgroundColor: Colors.grey.shade300,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  isFull ? Colors.red.shade400 : Colors.green.shade400,
+                            child: ListTile(
+                              contentPadding: EdgeInsets.all(16),
+                              leading: Container(
+                                padding: EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isFull
+                                      ? Colors.red.shade200
+                                      : Colors.green.shade200,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  isFull ? Icons.warning : Icons.check_circle,
+                                  color: isFull
+                                      ? Colors.red.shade700
+                                      : Colors.green.shade700,
                                 ),
                               ),
+                              title: Text(
+                                lot.primeLocationName ?? 'Unknown Lot',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Lot : $lotNumber',
+                                  ), // Sequential 1,2,3...
+                                  Text(
+                                    '${lot.address ?? 'N/A'}, ${lot.pinCode ?? 'N/A'}',
+                                  ),
+                                  SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.currency_rupee,
+                                        size: 14,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      Text(
+                                        '₹${lot.price}/hr',
+                                        style: TextStyle(fontSize: 14),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    availability,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: isFull
+                                          ? Colors.red.shade700
+                                          : Colors.green.shade700,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  SizedBox(
+                                    width: 60,
+                                    height: 4,
+                                    child: LinearProgressIndicator(
+                                      value: avail / total,
+                                      backgroundColor: Colors.grey.shade300,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        isFull
+                                            ? Colors.red.shade400
+                                            : Colors.green.shade400,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  selectedLotId = lot.id;
+                                });
+                                _showReserveDialog(context, lot);
+                              },
                             ),
-                          ],
+                          ),
                         ),
-                        onTap: () {
-                          setState(() {
-                            selectedLotId = lot.id;
-                          });
-                          _showReserveDialog(context, lot);
-                        },
-                      ),
-                    ),
+                      );
+                    },
                   ),
-                );
-              },
-            ),
           ),
         ],
       ),
@@ -441,7 +549,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 decoration: InputDecoration(
                   labelText: 'Vehicle Number',
                   prefixIcon: Icon(Icons.directions_car),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
               ),
               SizedBox(height: 16),
@@ -455,7 +565,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                   children: [
                     Icon(Icons.attach_money, color: Colors.blue.shade600),
                     SizedBox(width: 8),
-                    Text('Price: ₹${lot.price}/hour', style: TextStyle(fontWeight: FontWeight.w600)),
+                    Text(
+                      'Price: ₹${lot.price}/hour',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),
@@ -465,7 +578,10 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
                   ),
                   ElevatedButton(
                     onPressed: () {
@@ -474,10 +590,21 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.shade600,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 12,
+                      ),
                     ),
-                    child: Text('Reserve', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      'Reserve',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -500,7 +627,11 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
               SizedBox(width: 12),
               Text(
                 'Recent Parking History',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade800,
+                ),
               ),
             ],
           ),
@@ -511,11 +642,18 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
+                    Icon(
+                      Icons.event_busy,
+                      size: 80,
+                      color: Colors.grey.shade400,
+                    ),
                     SizedBox(height: 16),
                     Text(
                       'No parking history yet.',
-                      style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 18,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     SizedBox(height: 8),
                     Text(
@@ -542,19 +680,25 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                   // Find lot number (sequential)
                   final lotId = res.lotId ?? '';
                   final lotIndex = lots.indexWhere((lot) => lot.id == lotId);
-                  final lotNumber = lotIndex != -1 ? (lotIndex + 1).toString() : 'N/A';
+                  final lotNumber = lotIndex != -1
+                      ? (lotIndex + 1).toString()
+                      : 'N/A';
                   final spotCode = '$lotNumber-$spotIndex'; // e.g., "1-1"
                   return Container(
                     margin: EdgeInsets.only(bottom: 12),
                     child: Card(
                       elevation: 4,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       child: Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           border: Border(
                             left: BorderSide(
-                              color: isActive ? Colors.blue.shade400 : Colors.green.shade400,
+                              color: isActive
+                                  ? Colors.blue.shade400
+                                  : Colors.green.shade400,
                               width: 4,
                             ),
                           ),
@@ -564,12 +708,16 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                           leading: Container(
                             padding: EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: isActive ? Colors.blue.shade100 : Colors.green.shade100,
+                              color: isActive
+                                  ? Colors.blue.shade100
+                                  : Colors.green.shade100,
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
                               isActive ? Icons.access_time : Icons.check,
-                              color: isActive ? Colors.blue.shade600 : Colors.green.shade600,
+                              color: isActive
+                                  ? Colors.blue.shade600
+                                  : Colors.green.shade600,
                             ),
                           ),
                           title: Text(
@@ -589,12 +737,20 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                                   onPressed: () => _releaseSpot(res),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.orange.shade600,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
                                   ),
-                                  child: Text('Release', style: TextStyle(color: Colors.white)),
+                                  child: Text(
+                                    'Release',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
                                 )
                               : Container(
-                                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.green.shade100,
                                     borderRadius: BorderRadius.circular(12),
@@ -634,7 +790,11 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
               SizedBox(width: 12),
               Text(
                 'Parking Spots Overview',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.purple.shade800),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.purple.shade800,
+                ),
               ),
             ],
           ),
@@ -642,7 +802,9 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
           Expanded(
             child: Card(
               elevation: 8,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Container(
                 padding: EdgeInsets.all(24),
                 decoration: BoxDecoration(
@@ -651,29 +813,45 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
                     colors: [Colors.purple.shade50, Colors.white],
                   ),
                 ),
-                child: Column(
-                  children: [
-                    Text(
-                      'Spots Status',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple.shade700),
-                    ),
-                    SizedBox(height: 24),
-                    SizedBox(
-                      height: 250,
-                      child: DoughnutChart(
-                        occupied: occupied,
-                        available: available,
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      Text(
+                        'Spots Status',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.purple.shade700,
+                        ),
                       ),
-                    ),
-                    SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _buildStatCard('Occupied', occupied.toInt(), Colors.red.shade400, Icons.people),
-                        _buildStatCard('Available', available.toInt(), Colors.green.shade400, Icons.local_parking),
-                      ],
-                    ),
-                  ],
+                      SizedBox(height: 24),
+                      SizedBox(
+                        height: 200,
+                        child: DoughnutChart(
+                          occupied: occupied,
+                          available: available,
+                        ),
+                      ),
+                      SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildStatCard(
+                            'Occupied',
+                            occupied.toInt(),
+                            Colors.red.shade400,
+                            Icons.people,
+                          ),
+                          _buildStatCard(
+                            'Available',
+                            available.toInt(),
+                            Colors.green.shade400,
+                            Icons.local_parking,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -698,9 +876,35 @@ class _UserDashboardScreenState extends State<UserDashboardScreen>
           SizedBox(height: 8),
           Text(
             '$value',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color),
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
           ),
           Text(label, style: TextStyle(color: color, fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String title, String subtitle, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 80, color: Colors.grey.shade400),
+          SizedBox(height: 16),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(subtitle, style: TextStyle(color: Colors.grey.shade500)),
         ],
       ),
     );

@@ -5,6 +5,8 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const { Server } = require('socket.io');
 
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
@@ -12,12 +14,32 @@ const userRoutes = require('./routes/user');
 const paymentRoutes = require('./routes/payment');
 
 const app = express();
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  }
+});
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("✅ Client connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("❌ Client disconnected:", socket.id);
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 
 // Warn loudly when running without the secrets required for a secure deployment.
 if (!process.env.JWT_SECRET) {
   console.warn('WARNING: JWT_SECRET is not set. Using an insecure default. Set JWT_SECRET in production.');
 }
+
 if (!process.env.MONGODB_URI) {
   console.warn('WARNING: MONGODB_URI is not set. Falling back to mongodb://localhost:27017/parking.');
 }
@@ -35,6 +57,12 @@ mongoose.connect(MONGODB_URI)
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Make Socket.IO available in every request
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
 
 // Global logger
 app.use((req, res, next) => {
@@ -62,7 +90,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/health', (req, res) => res.json({ status: 'OK', connected: mongoose.connection.readyState === 1 }));
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`Server on port ${PORT}`);
+  console.log('Socket.IO Enabled');
   console.log('Test: http://localhost:3000/api/lots');
 });

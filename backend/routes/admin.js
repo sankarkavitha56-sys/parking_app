@@ -26,7 +26,7 @@ const isAdmin = async (req, res, next) => {
   }
 };
 
-router.get('/summary', async (req, res) => {
+router.get('/summary', isAdmin, async (req, res) => {
   try {
     // Fetch all completed reservations with populations
     const reservations = await Reservation.find({ leavingTimestamp: { $ne: null } })
@@ -119,6 +119,7 @@ router.post('/lots', isAdmin, async (req, res) => {
       await spot.save();
     }
 
+    req.io.emit("parkingUpdated");
     res.status(201).json(lot);
   } catch (err) {
     console.error('POST /lots error:', err);
@@ -129,6 +130,7 @@ router.put('/lots/:id', isAdmin, async (req, res) => {
   try {
     const lot = await ParkingLot.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!lot) return res.status(404).json({ message: 'Lot not found' });
+    req.io.emit("parkingUpdated");
     res.json(lot);
   } catch (err) {
     console.error('PUT /lots/:id error:', err);
@@ -138,12 +140,15 @@ router.put('/lots/:id', isAdmin, async (req, res) => {
 
 router.delete('/lots/:id', isAdmin, async (req, res) => {
   try {
-    const lot = await ParkingLot.findByIdAndDelete(req.params.id);
+    const lot = await ParkingLot.findById(req.params.id);
     if (!lot) return res.status(404).json({ message: 'Lot not found' });
 
+    const spotIds = await ParkingSpot.find({ lotId: lot._id }, '_id');
+    await Reservation.deleteMany({ spotId: { $in: spotIds } });
     await ParkingSpot.deleteMany({ lotId: lot._id });
-    await Reservation.deleteMany({ spotId: { $in: await ParkingSpot.find({ lotId: lot._id }, '_id') } });
+    await ParkingLot.findByIdAndDelete(lot._id);
 
+    req.io.emit("parkingUpdated");
     res.json({ message: 'Lot deleted' });
   } catch (err) {
     console.error('DELETE /lots/:id error:', err);

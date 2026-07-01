@@ -1,6 +1,8 @@
 // lib/screens/edit_lot_screen.dart
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
+import '../services/auth_service.dart';
 import '../models/parking_lot.dart';
 
 class EditLotScreen extends StatefulWidget {
@@ -84,7 +86,8 @@ class _EditLotScreenState extends State<EditLotScreen> {
       'maximumNumberOfSpots': int.parse(_maxSpotsController.text),
     };
     // Fix String? to String conversion for lot.id
-    await ApiService.updateParkingLot(widget.lot.id ?? '', data);
+    final token = context.read<AuthService>().token;
+    await ApiService.updateParkingLot(widget.lot.id ?? '', data, token: token);
     widget.onUpdated();
     if (!mounted) return;
     Navigator.pop(context);

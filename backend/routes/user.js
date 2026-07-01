@@ -232,6 +232,8 @@ router.post('/reservations', isUser, async (req, res) => {
       })
       .lean();
 
+    req.io.emit("parkingUpdated");
+
     res.status(201).json(populated || reservation);
   } catch (err) {
     console.error('POST /reservations error:', err);
@@ -267,6 +269,8 @@ router.put('/reservations/:id/release', isUser, async (req, res) => {
     spot.status = 'A';
     await spot.save();
     await reservation.save();
+
+    req.io.emit("parkingUpdated");
 
     res.json({ message: 'Released', cost: reservation.parkingCost });
   } catch (err) {

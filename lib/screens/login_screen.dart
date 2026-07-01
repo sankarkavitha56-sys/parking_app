@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
-import 'admin_register_screen.dart';
 import 'user_register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -69,32 +68,56 @@ class _LoginScreenState extends State<LoginScreen> {
                               children: [
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: () => setState(() => _isAdminLogin = false),
+                                    onPressed: () =>
+                                        setState(() => _isAdminLogin = false),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: _isAdminLogin ? Colors.grey.shade300 : Colors.blue.shade600,
+                                      backgroundColor: _isAdminLogin
+                                          ? Colors.grey.shade300
+                                          : Colors.blue.shade600,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
                                     child: Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      child: Text('User', style: TextStyle(color: _isAdminLogin ? Colors.grey.shade600 : Colors.white)),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: Text(
+                                        'User',
+                                        style: TextStyle(
+                                          color: _isAdminLogin
+                                              ? Colors.grey.shade600
+                                              : Colors.white,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
                                 SizedBox(width: 12),
                                 Expanded(
                                   child: ElevatedButton(
-                                    onPressed: () => setState(() => _isAdminLogin = true),
+                                    onPressed: () =>
+                                        setState(() => _isAdminLogin = true),
                                     style: ElevatedButton.styleFrom(
-                                      backgroundColor: _isAdminLogin ? Colors.purple.shade600 : Colors.grey.shade300,
+                                      backgroundColor: _isAdminLogin
+                                          ? Colors.purple.shade600
+                                          : Colors.grey.shade300,
                                       shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                     ),
                                     child: Padding(
-                                      padding: EdgeInsets.symmetric(vertical: 12),
-                                      child: Text('Admin', style: TextStyle(color: _isAdminLogin ? Colors.white : Colors.grey.shade600)),
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      child: Text(
+                                        'Admin',
+                                        style: TextStyle(
+                                          color: _isAdminLogin
+                                              ? Colors.white
+                                              : Colors.grey.shade600,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -105,18 +128,28 @@ class _LoginScreenState extends State<LoginScreen> {
                               controller: _usernameController,
                               decoration: InputDecoration(
                                 labelText: 'Username',
-                                prefixIcon: Icon(Icons.person, color: Colors.black87),
-                                labelStyle: TextStyle(color: Colors.black87), // Explicit label color
+                                prefixIcon: Icon(
+                                  Icons.person,
+                                  color: Colors.black87,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: Colors.black87,
+                                ), // Explicit label color
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.blue.shade600),
+                                  borderSide: BorderSide(
+                                    color: Colors.blue.shade600,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade400),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
                               ),
-                              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                              validator: (value) =>
+                                  value?.isEmpty ?? true ? 'Required' : null,
                             ),
                             SizedBox(height: 16),
                             TextFormField(
@@ -124,25 +157,39 @@ class _LoginScreenState extends State<LoginScreen> {
                               obscureText: _obscurePassword,
                               decoration: InputDecoration(
                                 labelText: 'Password',
-                                prefixIcon: Icon(Icons.lock, color: Colors.black87),
+                                prefixIcon: Icon(
+                                  Icons.lock,
+                                  color: Colors.black87,
+                                ),
                                 suffixIcon: IconButton(
                                   icon: Icon(
-                                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                                    _obscurePassword
+                                        ? Icons.visibility
+                                        : Icons.visibility_off,
                                     color: Colors.grey.shade600,
                                   ),
-                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  onPressed: () => setState(
+                                    () => _obscurePassword = !_obscurePassword,
+                                  ),
                                 ),
-                                labelStyle: TextStyle(color: Colors.black87), // Explicit label color
+                                labelStyle: TextStyle(
+                                  color: Colors.black87,
+                                ), // Explicit label color
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.blue.shade600),
+                                  borderSide: BorderSide(
+                                    color: Colors.blue.shade600,
+                                  ),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12),
-                                  borderSide: BorderSide(color: Colors.grey.shade400),
+                                  borderSide: BorderSide(
+                                    color: Colors.grey.shade400,
+                                  ),
                                 ),
                               ),
-                              validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                              validator: (value) =>
+                                  value?.isEmpty ?? true ? 'Required' : null,
                             ),
                             SizedBox(height: 24),
                             SizedBox(
@@ -168,14 +215,28 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             SizedBox(height: 16),
                             TextButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => _isAdminLogin ? AdminRegisterScreen() : UserRegisterScreen(),
-                                ),
-                              ),
+                              onPressed: () {
+                                if (_isAdminLogin) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Admin account is created manually in MongoDB Atlas. Please use the demo admin login.',
+                                      ),
+                                    ),
+                                  );
+                                  return;
+                                }
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => UserRegisterScreen(),
+                                  ),
+                                );
+                              },
                               child: Text(
-                                'New ${_isAdminLogin ? 'Admin' : 'User'}? Create Account',
+                                _isAdminLogin
+                                    ? 'Use demo admin account'
+                                    : 'New User? Create Account',
                                 style: TextStyle(color: Colors.blue.shade600),
                               ),
                             ),
@@ -197,21 +258,26 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_formKey.currentState!.validate()) {
       final role = _isAdminLogin ? 'admin' : 'user';
       final success = await context.read<AuthService>().login(
-            _usernameController.text,
-            _passwordController.text,
-          );
+        _usernameController.text,
+        _passwordController.text,
+      );
       if (!mounted) return;
       if (success && context.read<AuthService>().userRole == role) {
         final route = '/${context.read<AuthService>().userRole}';
         Navigator.pushReplacementNamed(context, route);
       } else if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Role mismatch. Please select correct login type.')),
+          SnackBar(
+            content: Text('Role mismatch. Please select correct login type.'),
+          ),
         );
         context.read<AuthService>().logout();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid credentials'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Invalid credentials'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

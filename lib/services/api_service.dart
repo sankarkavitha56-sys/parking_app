@@ -5,7 +5,10 @@ import '../models/parking_lot.dart';
 import '../models/user.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://parking-api.onrender.com/api',
+  );
 
   // http.Client() already returns a browser-aware client on web.
   static final http.Client _client = http.Client();
@@ -15,10 +18,13 @@ class ApiService {
 
   static Map<String, String> _headers([String? token]) {
     final headers = <String, String>{'Content-Type': 'application/json'};
+
     final authToken = token ?? _authToken;
+
     if (authToken != null && authToken.isNotEmpty) {
       headers['Authorization'] = 'Bearer $authToken';
     }
+
     return headers;
   }
 
@@ -78,7 +84,10 @@ class ApiService {
       if (query != null && query.isNotEmpty) {
         params['query'] = query;
       }
-      final res = await _get('/lots?${Uri(queryParameters: params).query}', token: token);
+      final res = await _get(
+        '/lots?${Uri(queryParameters: params).query}',
+        token: token,
+      );
       debugPrint('GET /lots status: ${res.statusCode}, body: ${res.body}');
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -95,10 +104,14 @@ class ApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getSpotsWithDetails({String? token}) async {
+  static Future<List<Map<String, dynamic>>> getSpotsWithDetails({
+    String? token,
+  }) async {
     try {
       final res = await _get('/spots/details', token: token);
-      debugPrint('GET /spots/details status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'GET /spots/details status: ${res.statusCode}, body: ${res.body}',
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List<dynamic>) return data.cast<Map<String, dynamic>>();
@@ -118,7 +131,9 @@ class ApiService {
   }) async {
     try {
       final res = await _get('/reservations', token: token);
-      debugPrint('GET /reservations status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'GET /reservations status: ${res.statusCode}, body: ${res.body}',
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data is List<dynamic>) return data;
@@ -179,13 +194,12 @@ class ApiService {
     }
   }
 
-  static Future<bool> deleteParkingLot(
-    String id, {
-    String? token,
-  }) async {
+  static Future<bool> deleteParkingLot(String id, {String? token}) async {
     try {
       final res = await _delete('/admin/lots/$id', token: token);
-      debugPrint('DELETE /lots/$id status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'DELETE /lots/$id status: ${res.statusCode}, body: ${res.body}',
+      );
       return res.statusCode == 200;
     } catch (e) {
       debugPrint('deleteParkingLot error: $e');
@@ -199,7 +213,9 @@ class ApiService {
   }) async {
     try {
       final res = await _get('/spots/$spotId/details', token: token);
-      debugPrint('GET /spots/$spotId/details status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'GET /spots/$spotId/details status: ${res.statusCode}, body: ${res.body}',
+      );
       return res;
     } catch (e) {
       debugPrint('getSpotDetails error: $e');
@@ -224,7 +240,10 @@ class ApiService {
     setAuthToken(null);
   }
 
-  static Future<Map<String, dynamic>?> releaseReservation(String resvId, {String? token}) async {
+  static Future<Map<String, dynamic>?> releaseReservation(
+    String resvId, {
+    String? token,
+  }) async {
     if (resvId.isEmpty) {
       debugPrint('releaseReservation: Empty resvId, skipping.');
       return null;
@@ -232,7 +251,9 @@ class ApiService {
 
     try {
       final res = await _put('/reservations/$resvId/release', {}, token: token);
-      debugPrint('PUT /reservations/$resvId/release - Status: ${res.statusCode} - Body: ${res.body}');
+      debugPrint(
+        'PUT /reservations/$resvId/release - Status: ${res.statusCode} - Body: ${res.body}',
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body) as Map<String, dynamic>;
         return data; // e.g., {'message': 'Released', 'cost': 5.25}
@@ -271,7 +292,9 @@ class ApiService {
     try {
       final data = {'lotId': lotId, 'vehicleNumber': vehicleNumber};
       final res = await _post('/reservations', data, token: token);
-      debugPrint('POST /reservations status: ${res.statusCode}, body: ${res.body}');
+      debugPrint(
+        'POST /reservations status: ${res.statusCode}, body: ${res.body}',
+      );
       return res.statusCode == 201;
     } catch (e) {
       debugPrint('reserveSpot error: $e');
